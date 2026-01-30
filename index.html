@@ -1,0 +1,1220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Urban Forge Pro | Draggable Precision v7.1.4</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <!-- Core Dependencies -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://unpkg.com/shp-write@latest/shpwrite.js"></script>
+
+    <!-- Map Engine -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;700;900&family=JetBrains+Mono:wght@500&display=swap');
+        :root { --bg-pulp: #D0CEBF; --neo-black: #111111; --alert-red: #FF3333; }
+
+        body { font-family: 'Inter', sans-serif; background-color: var(--bg-pulp); color: var(--neo-black); overflow: hidden; }
+        .mono { font-family: 'JetBrains Mono', monospace; }
+
+        /* SYSTEM STATUS INDICATOR */
+        .status-light { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+        .status-ok { background: #00FF00; box-shadow: 0 0 5px #00FF00; }
+        .status-warn { background: #FFA500; box-shadow: 0 0 5px #FFA500; }
+        .status-err { background: #FF0000; box-shadow: 0 0 5px #FF0000; }
+
+        /* BRUTALIST COMPONENTS */
+        .neo-card {
+            background: white; border: 2px solid black;
+            box-shadow: 6px 6px 0px 0px rgba(0,0,0,1);
+        }
+
+        .neo-input { 
+            border: 2px solid black; outline: none; transition: all 0.1s; 
+            font-family: 'JetBrains Mono', monospace; font-weight: 700;
+        }
+        .neo-input:focus { background-color: #f0f9ff; box-shadow: 4px 4px 0px 0px black; }
+
+        .btn-core {
+            background: black; color: white; font-weight: 900; text-transform: uppercase;
+            letter-spacing: 0.05em; border: 2px solid black; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 0.5rem;
+            transition: transform 0.1s, box-shadow 0.1s;
+        }
+        .btn-core:hover { transform: translate(-1px, -1px); box-shadow: 3px 3px 0px 0px #3b82f6; }
+        .btn-core:active { transform: translate(1px, 1px); box-shadow: 0px 0px 0px 0px; }
+        .btn-core:disabled { background: #555; cursor: not-allowed; transform: none; box-shadow: none; }
+
+        .btn-ghost {
+            background: white; color: black; font-weight: 800; border: 2px solid black;
+            text-transform: uppercase; font-size: 10px; cursor: pointer;
+            display: flex; align-items: center; justify-content: center; gap: 4px;
+        }
+        .btn-ghost:hover { background: #eee; }
+
+        .btn-external {
+             font-size: 9px; font-weight: 900; text-transform: uppercase; 
+             color: #2563eb; text-decoration: underline; cursor: pointer;
+        }
+
+        /* AI CHAT WIDGET */
+        .chat-widget {
+            position: fixed; bottom: 20px; right: 20px; width: 340px; height: 500px;
+            background: white; border: 3px solid black; box-shadow: 10px 10px 0px 0px black;
+            display: none; flex-direction: column; z-index: 5000;
+        }
+        .chat-body { flex: 1; padding: 12px; overflow-y: auto; background: #f4f4f5; display: flex; flex-direction: column; gap: 12px; }
+        .chat-bubble { padding: 10px 14px; font-size: 11px; max-width: 85%; border: 1px solid black; line-height: 1.4; }
+        .chat-bubble.user { align-self: flex-end; background: black; color: white; border-radius: 8px 8px 0 8px; }
+        .chat-bubble.ai { align-self: flex-start; background: white; color: black; border-radius: 8px 8px 8px 0; }
+
+        /* LOADING STATES */
+        .loader-overlay { background: rgba(208, 206, 191, 1); display: flex; z-index: 9999; }
+        .scan-line { height: 4px; background: black; width: 100%; position: absolute; animation: scanline 1.5s linear infinite; }
+        @keyframes scanline { 0% { transform: translateY(-100%); } 100% { transform: translateY(100%); } }
+
+        /* MAP */
+        #map { height: 100%; width: 100%; filter: grayscale(1) contrast(1.1); background: #e5e5e5; }
+        .leaflet-marker-icon { cursor: grab !important; }
+        .leaflet-marker-draggable { cursor: move !important; }
+
+        .toast { position: fixed; bottom: 2rem; left: 50%; transform: translateX(-50%); background: black; color: white; padding: 12px 24px; border: 2px solid white; z-index: 6000; display: none; font-weight: 900; text-transform: uppercase; font-size: 10px; letter-spacing: 1px; }
+
+        .source-badge { font-size: 9px; font-weight: 900; padding: 2px 6px; border: 1px solid black; background: #fff; display: inline-flex; align-items: center; gap: 4px; }
+        .drag-hint { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(255,255,255,0.9); border: 2px solid black; padding: 4px 12px; font-size: 10px; font-weight: 900; text-transform: uppercase; z-index: 1000; display: none; }
+    </style>
+</head>
+<body class="h-screen flex flex-col md:flex-row">
+
+    <div id="toast" class="toast">System Notification</div>
+
+    <!-- INITIALIZATION GATE -->
+    <div id="initGate" class="loader-overlay fixed inset-0 flex-col items-center justify-center p-6 text-center">
+        <div class="relative w-72 h-auto border-4 border-black bg-white shadow-[12px_12px_0px_0px_black] p-8">
+            <div class="scan-line top-0 left-0"></div>
+            <i data-lucide="cpu" class="w-12 h-12 mb-4 mx-auto text-blue-600 animate-pulse"></i>
+            <h2 class="text-xl font-black uppercase tracking-tighter mb-2">Urban Forge Pro</h2>
+            <div class="text-[10px] font-bold uppercase tracking-widest text-zinc-500 mb-6">System v7.1.4 | Draggable Precision</div>
+
+            <div class="space-y-2 text-left mb-6">
+                <div class="flex justify-between text-[10px] font-bold uppercase">
+                    <span>Geocoding Engine</span>
+                    <span id="statusGis" class="text-yellow-600">Checking...</span>
+                </div>
+                <div class="flex justify-between text-[10px] font-bold uppercase">
+                    <span>eThekwini Portal</span>
+                    <span id="statusPortal" class="text-green-600">Ready (Link)</span>
+                </div>
+                <div class="flex justify-between text-[10px] font-bold uppercase">
+                    <span>AI Neural Link</span>
+                    <span id="statusAi" class="text-yellow-600">Checking...</span>
+                </div>
+            </div>
+
+            <div class="w-full bg-gray-200 h-2 border border-black mb-4">
+                <div id="bootBar" class="bg-black h-full w-0 transition-all duration-500"></div>
+            </div>
+
+            <button id="enterBtn" disabled class="w-full btn-core py-3 text-xs opacity-50">
+                System Locked
+            </button>
+            <div class="mt-4 text-[9px] text-red-500 font-bold cursor-pointer hover:underline" onclick="app.forceStart()">[Force Offline Boot]</div>
+        </div>
+    </div>
+
+    <!-- CHATBOT -->
+    <div id="chatWidget" class="chat-widget">
+        <div class="bg-black text-white p-3 flex justify-between items-center cursor-pointer" onclick="document.getElementById('chatWidget').style.display='none'">
+            <div class="flex items-center gap-2 font-black text-xs uppercase tracking-widest">
+                <i data-lucide="bot" class="w-4 h-4"></i> Planner Bot
+            </div>
+            <i data-lucide="x" class="w-4 h-4"></i>
+        </div>
+        <div id="chatBody" class="chat-body">
+            <div class="chat-bubble ai">
+                <strong>System Online.</strong><br>
+                I use your inputs + the built-in scheme table. I do <strong>not</strong> automatically fetch eThekwini Portal layers (use the portal link to verify). Ask me about zoning, yield, and feasibility, and I will flag missing data clearly.
+            </div>
+        </div>
+        <div class="p-3 bg-white border-t-2 border-black flex gap-2">
+            <input type="text" id="chatInput" placeholder="Ask about zoning..." class="flex-1 text-xs font-bold border-2 border-black p-2 outline-none">
+            <button id="sendChatBtn" class="bg-black text-white p-2 border-2 border-black hover:bg-zinc-800">
+                <i data-lucide="arrow-right" class="w-4 h-4"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- FAB CHAT TOGGLE -->
+    <button onclick="document.getElementById('chatWidget').style.display='flex'" class="fixed bottom-8 right-8 w-14 h-14 bg-blue-600 border-2 border-black rounded-full flex items-center justify-center text-white shadow-[4px_4px_0px_black] hover:scale-110 transition-transform z-40">
+        <i data-lucide="message-circle" class="w-7 h-7"></i>
+    </button>
+
+    <!-- SIDEBAR -->
+    <aside class="w-full md:w-72 border-b-2 md:border-b-0 md:border-r-2 border-black flex flex-col bg-[#E5E5E5] shrink-0 z-20">
+        <div class="p-6 border-b-2 border-black bg-white">
+            <div class="flex items-center gap-2 mb-1">
+                <i data-lucide="hexagon" class="w-6 h-6 stroke-[3px]"></i>
+                <span class="font-black text-xl uppercase tracking-tighter">Urban Forge</span>
+            </div>
+            <div class="flex items-center gap-2 text-[9px] font-black uppercase tracking-widest text-zinc-500">
+                <div class="status-light status-ok"></div> Systems Normal
+            </div>
+        </div>
+
+        <div class="p-4 border-b-2 border-black bg-zinc-50">
+            <div class="text-[9px] font-black uppercase opacity-50 tracking-widest mb-2">Data Sources Active</div>
+            <div class="flex flex-wrap gap-2">
+                <div class="source-badge"><i data-lucide="globe" class="w-3 h-3 text-blue-500"></i> OpenStreetMap</div>
+                <div class="source-badge"><i data-lucide="database" class="w-3 h-3 text-green-500"></i> eThekwini Portal</div>
+                <div class="source-badge"><i data-lucide="hard-drive" class="w-3 h-3 text-gray-500"></i> Internal DB</div>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto p-4 space-y-4">
+             <div class="text-[10px] font-black uppercase opacity-50 tracking-widest mb-2">Audit History</div>
+             <div id="historyList" class="space-y-2">
+                 <div class="p-3 border border-black/10 bg-white text-[10px] text-center italic opacity-50">No recent audits</div>
+             </div>
+        </div>
+
+        <div class="p-4 border-t-2 border-black bg-white">
+            <div class="text-[9px] font-black uppercase opacity-40 mb-2">Active Operator</div>
+            <div class="flex items-center gap-3">
+                <div class="w-8 h-8 bg-black text-white flex items-center justify-center font-black text-xs">OP</div>
+                <div>
+                    <div class="text-[10px] font-black uppercase">Admin_User</div>
+                    <div class="text-[8px] mono">Session: #8X-99</div>
+                </div>
+            </div>
+        </div>
+    </aside>
+
+    <!-- MAIN CANVAS -->
+    <main class="flex-1 flex flex-col bg-[#FDFCF8] overflow-hidden relative">
+
+        <!-- TOP NAV -->
+        <header class="h-16 border-b-2 border-black bg-white px-6 flex items-center justify-between z-10">
+            <div class="flex border-2 border-black h-10 shadow-[4px_4px_0px_0px_black] bg-white w-full max-w-lg">
+                <div class="px-3 flex items-center bg-zinc-100 border-r-2 border-black text-[10px] font-black uppercase">
+                    <i data-lucide="search" class="w-3 h-3 mr-2"></i> Query
+                </div>
+                <input type="text" id="siteInput" value="716 Musgrave Road" class="flex-1 px-3 text-xs font-bold outline-none bg-transparent">
+                <button id="searchBtn" class="px-6 bg-blue-600 text-white font-black text-[10px] uppercase hover:bg-blue-700">Scan</button>
+            </div>
+
+            <div class="flex gap-3">
+                <button id="btnSettings" class="btn-ghost px-4 h-10 shadow-[2px_2px_0px_black]">
+                    <i data-lucide="key" class="w-3 h-3"></i> API Key
+                </button>
+                <button id="saveBtn" class="btn-ghost px-4 h-10 shadow-[2px_2px_0px_black]">
+                    <i data-lucide="save" class="w-3 h-3"></i> Save
+                </button>
+                <button id="downloadBtn" class="btn-core px-4 h-10 shadow-[4px_4px_0px_#10b981]">
+                    <i data-lucide="download" class="w-3 h-3"></i> Dossier
+                </button>
+            <button id="exportPackBtn" class="btn-ghost px-4 h-10 shadow-[2px_2px_0px_black]">
+                    <i data-lucide="package" class="w-3 h-3"></i> Pack
+                </button>
+            
+
+        <!-- CONTENT SCROLL -->
+        <div id="workspace" class="flex-1 overflow-y-auto p-6 md:p-10 opacity-50 pointer-events-none transition-opacity duration-300">
+            <div class="max-w-7xl mx-auto grid grid-cols-12 gap-8">
+
+                <!-- HEADER -->
+                <div class="col-span-12 flex justify-between items-end border-b-4 border-black pb-4">
+                    <div>
+                        <h1 class="text-4xl md:text-6xl font-black uppercase tracking-tighter leading-none mb-2">Site Audit</h1>
+                        <div class="flex items-center gap-4 text-[11px] font-bold uppercase mono">
+                            <span id="displayAddress" class="bg-black text-white px-2 py-1">UNIDENTIFIED SITE</span>
+                            <span id="displayCoords" class="text-zinc-500">0.0000, 0.0000</span>
+                        </div>
+                    </div>
+                    <div class="text-right hidden md:block">
+                        <div class="text-[9px] font-black uppercase opacity-40">Financial Feasibility</div>
+                        <div class="text-3xl font-black" id="totalProjectValue">R --</div>
+                    </div>
+                </div>
+
+                <!-- KPI DASHBOARD -->
+                <div class="col-span-12 grid grid-cols-2 md:grid-cols-4 gap-4">
+                    <div class="neo-card p-4 text-center">
+                        <div class="text-[9px] font-black uppercase opacity-40 mb-1">Net Buildable Area</div>
+                        <div class="text-3xl font-black" id="valNetArea">--</div>
+                        <div class="text-[9px] font-bold text-red-500" id="valDeduction">(-0 m² DMOSS)</div>
+                    </div>
+                    <div class="neo-card p-4 text-center bg-blue-50">
+                        <div class="text-[9px] font-black uppercase opacity-40 mb-1 text-blue-900">Unit Yield</div>
+                        <div class="text-3xl font-black text-blue-700" id="valYield">--</div>
+                        <div class="text-[9px] font-bold text-blue-400" id="valZone">Zone: --</div>
+                    </div>
+                    <div class="neo-card p-4 text-center">
+                        <div class="text-[9px] font-black uppercase opacity-40 mb-1">Prof. Fees (12%)</div>
+                        <div class="text-2xl font-black" id="valFees">--</div>
+                    </div>
+                    <div class="neo-card p-4 text-center">
+                        <div class="text-[9px] font-black uppercase opacity-40 mb-1">Bulk Surcharge</div>
+                        <div class="text-2xl font-black text-red-600" id="valSurcharge">--</div>
+                    </div>
+                </div>
+
+                <!-- LEFT COLUMN: CONTROLS & AI -->
+                <div class="col-span-12 lg:col-span-4 space-y-6">
+
+                    <!-- INPUTS -->
+                    <div class="neo-card p-5 space-y-4">
+                        <div class="flex items-center gap-2 border-b-2 border-black pb-2 mb-2">
+                            <i data-lucide="sliders-horizontal" class="w-4 h-4"></i>
+                            <span class="text-[10px] font-black uppercase tracking-widest">Site Parameters</span>
+                        </div>
+
+                        <div>
+                            <label class="text-[9px] font-bold uppercase mb-1 block">Gross Area (m²)</label>
+                            <input type="number" id="inArea" value="2500" class="w-full neo-input p-2 text-lg">
+                        </div>
+
+                        <div class="bg-red-50 p-3 border border-red-200">
+                            <label class="text-[9px] font-bold uppercase mb-1 block text-red-600 flex justify-between">
+                                <span>Constraint Layer (DMOSS)</span>
+                                <i data-lucide="alert-octagon" class="w-3 h-3"></i>
+                            </label>
+                            <input type="number" id="inDmoss" value="0" class="w-full neo-input p-2 text-sm text-red-600 border-red-200">
+                        </div>
+
+                        <div>
+                            <label class="text-[9px] font-bold uppercase mb-1 block">Zoning Definition</label>
+                            <select id="inZone" class="w-full neo-input p-2 text-sm bg-white">
+                                <option value="GR1">GR1 - General Res 1 (High Density)</option>
+                                <option value="GR2">GR2 - General Res 2 (Med Density)</option>
+                                <option value="MU2">MU2 - Mixed Use 2 (Commercial)</option>
+                            </select>
+                        </div>
+
+                        <div class="flex items-center justify-between border-2 border-black p-3 bg-white">
+                            <div class="flex items-center gap-2">
+                                <i data-lucide="shield-alert" class="w-4 h-4 text-red-600"></i>
+                                <span class="text-[9px] font-black uppercase tracking-widest">Complexity Surcharge</span>
+                            </div>
+                            <label class="flex items-center gap-2 text-[10px] font-black uppercase cursor-pointer">
+                                <input id="inComplex" type="checkbox" class="accent-red-600">
+                                <span class="text-red-600">ON</span>
+                            </label>
+                        </div>
+
+                    </div>
+
+                    <!-- AI COMMAND CENTER -->
+                    <div class="neo-card p-5 bg-[#FFFCE4] shadow-[8px_8px_0px_#F59E0B]">
+                        <div class="flex items-center justify-between border-b-2 border-black/10 pb-2 mb-4">
+                            <div class="flex items-center gap-2 text-amber-900">
+                                <i data-lucide="cpu" class="w-4 h-4"></i>
+                                <span class="text-[10px] font-black uppercase tracking-widest">Neural Engine</span>
+                            </div>
+</div>
+
+                        <div id="aiOutput" class="text-[11px] font-medium leading-relaxed italic text-amber-900/80 min-h-[60px] mb-4">
+                            System ready. Select a strategy below to initiate audit using multi-source data aggregation.
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-2 mb-2">
+                            <button id="btnSwot" class="btn-ghost h-8 bg-white/50 text-amber-900 border-amber-900 hover:bg-white">SWOT Analysis</button>
+                            <button id="btnEco" class="btn-ghost h-8 bg-white/50 text-green-900 border-green-900 hover:bg-white">Eco Audit</button>
+                        </div>
+                        <button id="btnFullAudit" class="w-full btn-core h-10 text-[10px]">
+                            <i data-lucide="sparkles" class="w-3 h-3"></i> Execute Full Audit
+                        </button>
+
+                        <button id="btnPitch" class="w-full btn-ghost h-9 bg-white mt-2 border-2 border-black">
+                            <i data-lucide="pen-tool" class="w-3 h-3"></i> Draft Investment Pitch
+                        </button>
+                    </div>
+
+                </div>
+
+                <!-- RIGHT COLUMN: GIS -->
+                <div class="col-span-12 lg:col-span-8">
+                    <div class="neo-card h-[600px] flex flex-col relative">
+                        <div class="p-3 bg-zinc-100 border-b-2 border-black flex justify-between items-center">
+                            <span class="text-[10px] font-black uppercase flex items-center gap-2">
+                                <i data-lucide="globe" class="w-3 h-3"></i> Spatial Context
+                            </span>
+                            <div class="flex gap-3 items-center">
+                                <button id="btnExternalPortal" class="btn-external">
+                                    <i data-lucide="external-link" class="w-3 h-3 inline"></i> Verify on eThekwini Portal
+                                </button>
+                                <button id="btnExportGis" class="text-[9px] font-bold uppercase underline hover:text-blue-600">Export .SHP Package</button>
+                            </div>
+                        </div>
+                        <div class="flex-1 relative bg-gray-200">
+                            <div id="map"></div>
+                            <!-- Draggable Hint -->
+                            <div id="dragHint" class="drag-hint">
+                                <i data-lucide="move" class="w-3 h-3 inline"></i> Draggable Mode Active
+                            </div>
+                            <!-- Map Overlay Loader -->
+                            <div id="mapLoader" class="absolute inset-0 bg-black/80 z-[1000] hidden flex-col items-center justify-center text-white">
+                                <i data-lucide="loader" class="w-8 h-8 animate-spin mb-2"></i>
+                                <span class="text-[9px] font-bold uppercase tracking-widest">Aggregating Sources...</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+    </main>
+
+    
+<script type="module">
+// Urban Forge Pro | GitHub Pack v7.1.4 (No TTS) | Commercial hardening
+// - No Firebase / no platform placeholders
+// - Gemini API key + model configurable via Settings modal (localStorage)
+// - GIS export fixed: GeoJSON + Shapefile ZIP
+// - PDF dossier export hardened (autoTable)
+// - Local audit history + save/load
+
+const STORAGE = {
+  KEY: 'UFP_SETTINGS_V1',
+  HISTORY: 'UFP_AUDIT_HISTORY_V1',
+};
+
+const DEFAULT_SETTINGS = {
+  geminiKey: '',
+  geminiModel: 'gemini-1.5-flash',
+  aiStyle: 'html', // 'html' | 'text'
+};
+
+const CONFIG = {
+  scheme: {
+    GR1: { far: 1.0, coverage: 40, height: 3, density: 400, kFactor: 2, openSpace: 0.15 },
+    GR2: { far: 1.5, coverage: 50, height: 25, density: 150, kFactor: 3, openSpace: 0.10 },
+    MU2: { far: 2.5, coverage: 80, height: 45, density: 100, kFactor: 5, openSpace: 0.05 },
+  },
+  financials: {
+    costPerM2: 15000,
+    surchargePerM2: 250,
+    feesPct: 0.12,
+  },
+  localDb: {
+    musgrave: { lat: -29.8493, lon: 31.0034, name: 'Musgrave, Berea' },
+    florida: { lat: -29.8375, lon: 31.0194, name: 'Florida Road, Morningside' },
+    umhlanga: { lat: -29.7282, lon: 31.0841, name: 'Umhlanga Rocks' },
+    durban: { lat: -29.8587, lon: 31.0218, name: 'Durban Central' },
+  },
+  externalPortal: 'https://gis-ethekwini.opendata.arcgis.com/search?q=',
+  geminiEndpoint: (model, key) => `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent?key=${encodeURIComponent(key)}`,
+};
+
+const $ = (id) => document.getElementById(id);
+
+function safeNumber(x, fallback = 0) {
+  const n = typeof x === 'number' ? x : Number(String(x).trim());
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function clamp(n, min, max) {
+  return Math.min(max, Math.max(min, n));
+}
+
+function loadSettings() {
+  try {
+    const raw = localStorage.getItem(STORAGE.KEY);
+    if (!raw) return { ...DEFAULT_SETTINGS };
+    const parsed = JSON.parse(raw);
+    return { ...DEFAULT_SETTINGS, ...parsed };
+  } catch {
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function saveSettings(settings) {
+  localStorage.setItem(STORAGE.KEY, JSON.stringify(settings));
+}
+
+function loadHistory() {
+  try {
+    const raw = localStorage.getItem(STORAGE.HISTORY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveHistory(history) {
+  localStorage.setItem(STORAGE.HISTORY, JSON.stringify(history.slice(0, 50)));
+}
+
+class HealthService {
+  static async check(settings) {
+    const gisOk = typeof window.L !== 'undefined';
+    $('statusGis').innerText = gisOk ? 'ONLINE' : 'OFFLINE';
+    $('statusGis').className = gisOk ? 'text-green-600' : 'text-red-600';
+
+    const aiOk = !!settings.geminiKey;
+    $('statusAi').innerText = aiOk ? 'READY' : 'NEEDS KEY';
+    $('statusAi').className = aiOk ? 'text-green-600' : 'text-yellow-600';
+
+    const bar = $('bootBar');
+    bar.style.width = '100%';
+    await new Promise((r) => setTimeout(r, 650));
+
+    const enterBtn = $('enterBtn');
+    enterBtn.innerText = 'INITIALIZE WORKSPACE';
+    enterBtn.disabled = false;
+    enterBtn.style.opacity = '1';
+    enterBtn.onclick = () => {
+      $('initGate').style.display = 'none';
+      $('workspace').style.opacity = '1';
+      $('workspace').style.pointerEvents = 'auto';
+    };
+  }
+}
+
+class CalculationService {
+  static compute(rawArea, dmossArea, zoneKey, isComplex) {
+    const config = CONFIG.scheme[zoneKey] || CONFIG.scheme.GR1;
+    const netArea = Math.max(0, rawArea - dmossArea);
+    const gfa = netArea * config.far;
+    const units = Math.floor(netArea / config.density);
+    const coverage = netArea * (config.coverage / 100);
+
+    const constructionCost = gfa * CONFIG.financials.costPerM2;
+    const surcharge = gfa * CONFIG.financials.surchargePerM2;
+    const fees = constructionCost * CONFIG.financials.feesPct;
+    const complexityFee = isComplex ? (fees * 0.15) : 0;
+    const totalProject = constructionCost + surcharge + fees + complexityFee;
+
+    return {
+      rawArea,
+      dmossArea,
+      netArea,
+      zoneKey,
+      gfa,
+      units,
+      coverage,
+      height: config.height,
+      constructionCost,
+      surcharge,
+      fees,
+      complexityFee,
+      totalProject,
+      isComplex,
+      meta: {
+        far: config.far,
+        density: config.density,
+        coveragePct: config.coverage,
+        openSpacePct: config.openSpace,
+      },
+    };
+  }
+}
+
+class GisService {
+  constructor() {
+    this.map = null;
+    this.marker = null;
+    this.current = { lat: CONFIG.localDb.durban.lat, lon: CONFIG.localDb.durban.lon, name: CONFIG.localDb.durban.name };
+  }
+
+  init() {
+    if (this.map) return;
+    this.map = L.map('map').setView([this.current.lat, this.current.lon], 13);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+      attribution: '© OpenStreetMap © CARTO',
+    }).addTo(this.map);
+  }
+
+  updateView(lat, lon, label, onDrag) {
+    if (!this.map) this.init();
+    const coords = [lat, lon];
+    this.current = { lat, lon, name: label };
+
+    this.map.setView(coords, 18);
+    if (this.marker) this.map.removeLayer(this.marker);
+
+    this.marker = L.marker(coords, { draggable: true }).addTo(this.map).bindPopup(label).openPopup();
+    this.marker.on('dragend', (e) => {
+      const p = e.target.getLatLng();
+      onDrag?.(p.lat, p.lng);
+    });
+  }
+
+  async search(query) {
+    const hint = $('dragHint');
+    hint.style.display = 'none';
+
+    const cleanQuery = String(query || '').replace(', Durban', '').replace(', eThekwini', '').trim();
+    if (!cleanQuery) return CONFIG.localDb.durban;
+
+    // Local cache
+    const qLower = cleanQuery.toLowerCase();
+    for (const k in CONFIG.localDb) {
+      if (qLower.includes(k)) return CONFIG.localDb[k];
+    }
+
+    const fetchJson = async (url) => {
+      const res = await fetch(url, {
+        headers: {
+          // Nominatim policy: identify app; email omitted for privacy
+          'Accept': 'application/json',
+        },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json();
+    };
+
+    try {
+      // Level 1: precise
+      let data = await fetchJson(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(cleanQuery + ', Durban, South Africa')}`);
+      if (data?.length) {
+        return { lat: safeNumber(data[0].lat), lon: safeNumber(data[0].lon), name: data[0].display_name };
+      }
+
+      // Level 2: street-only
+      const streetOnly = cleanQuery.replace(/^\d+\s+/, '').replace(/^(unit|shop|flat)\s+\d+,?\s*/i, '').trim();
+      if (streetOnly && streetOnly !== cleanQuery) {
+        app.showToast('Exact number unknown. Centering on street…');
+        data = await fetchJson(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(streetOnly + ', Durban, South Africa')}`);
+        if (data?.length) {
+          hint.style.display = 'block';
+          return { lat: safeNumber(data[0].lat), lon: safeNumber(data[0].lon), name: `${streetOnly} (Street Center)` };
+        }
+      }
+
+      // Level 3: broad
+      app.showToast('Address approximated. Drag pin to refine.');
+      data = await fetchJson(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(cleanQuery)}`);
+      if (data?.length) {
+        hint.style.display = 'block';
+        return { lat: safeNumber(data[0].lat), lon: safeNumber(data[0].lon), name: data[0].display_name };
+      }
+    } catch (e) {
+      console.warn('[GIS] search fail', e);
+    }
+
+    app.showToast('Address not found. Reverting to Durban Central.');
+    return CONFIG.localDb.durban;
+  }
+
+  static buildSiteGeoJson(stats, address, lat, lon) {
+    // Rough square boundary from netArea. This is an approximation unless a true parcel boundary is available.
+    const sideMeters = Math.sqrt(Math.max(1, stats.netArea));
+    const half = sideMeters / 2;
+
+    // Convert meters to degrees (approx).
+    const metersPerDegLat = 111_320;
+    const metersPerDegLon = 111_320 * Math.cos((lat * Math.PI) / 180);
+
+    const dLat = half / metersPerDegLat;
+    const dLon = half / (metersPerDegLon || 1);
+
+    return {
+      type: 'FeatureCollection',
+      features: [
+        {
+          type: 'Feature',
+          properties: {
+            name: address,
+            generatedBoundary: true,
+            generatedBoundaryNote: 'Approx boundary derived from net area. Replace with true cadastral polygon if available.',
+            ...stats,
+          },
+          geometry: {
+            type: 'Polygon',
+            coordinates: [
+              [
+                [lon - dLon, lat - dLat],
+                [lon + dLon, lat - dLat],
+                [lon + dLon, lat + dLat],
+                [lon - dLon, lat + dLat],
+                [lon - dLon, lat - dLat],
+              ],
+            ],
+          },
+        },
+      ],
+    };
+  }
+
+  async exportPackage(stats, address, lat, lon) {
+    // Always include GeoJSON.
+    const zip = new JSZip();
+    const geojson = GisService.buildSiteGeoJson(stats, address, lat, lon);
+    zip.file('site_boundary.geojson', JSON.stringify(geojson, null, 2));
+    zip.file('audit_report.json', JSON.stringify({ address, lat, lon, stats }, null, 2));
+
+    // Shapefile export (if shpwrite available)
+    // Produces a ZIP containing .shp/.shx/.dbf etc.
+    try {
+      if (typeof window.shpwrite !== 'undefined') {
+        const shpZip = window.shpwrite.zip(geojson, {
+          folder: 'shapefile',
+          types: {
+            polygon: 'site_boundary',
+          },
+        });
+        zip.file('shapefile/site_boundary_shp.zip', shpZip);
+      } else {
+        zip.file('shapefile/README.txt', 'Shapefile exporter (shp-write) not loaded. GeoJSON is included and is the preferred modern format.');
+      }
+    } catch (e) {
+      zip.file('shapefile/ERROR.txt', String(e));
+    }
+
+    const blob = await zip.generateAsync({ type: 'blob' });
+    saveAs(blob, 'UrbanForge_GIS_Export.zip');
+  }
+}
+
+class AiService {
+  static async call(settings, prompt) {
+    if (!settings.geminiKey) return 'AI is configured OFF (no key). Open **API Key** and paste your Gemini key.';
+
+    const url = CONFIG.geminiEndpoint(settings.geminiModel, settings.geminiKey);
+    const body = {
+      contents: [{ parts: [{ text: prompt }] }],
+      generationConfig: {
+        temperature: 0.35,
+        topP: 0.9,
+        maxOutputTokens: 1024,
+      },
+    };
+
+    try {
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+
+    if (!res.ok) {
+        const t = await res.text().catch(() => '');
+        return `AI error: ${res.status}. ${t.slice(0, 200)}`;
+      }
+
+      const data = await res.json();
+      const text = data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join('\\n') || '';
+      return text || 'AI returned an empty response.';
+    } catch (e) {
+      return `AI link failed: ${String(e)}`;
+    }
+  }
+}
+
+function renderHistory(history) {
+  const list = $('historyList');
+  if (!list) return;
+
+  if (!history.length) {
+    list.innerHTML = '<div class="p-3 border border-black/10 bg-white text-[10px] text-center italic opacity-50">No recent audits</div>';
+    return;
+  }
+
+  list.innerHTML = history
+    .slice(0, 10)
+    .map((h) => {
+      const when = new Date(h.ts).toLocaleString();
+      return `
+        <div class="neo-card p-3 cursor-pointer hover:bg-zinc-50" data-id="${h.id}">
+          <div class="text-[9px] font-black uppercase tracking-widest">${h.address || 'Saved Audit'}</div>
+          <div class="text-[9px] mono opacity-70">${when}</div>
+          <div class="text-[10px] font-bold mt-1">Yield ${h.stats?.units ?? '--'} | Net ${Math.round(h.stats?.netArea ?? 0)}m² | R ${(safeNumber(h.stats?.totalProject) / 1e6).toFixed(1)}m</div>
+        </div>
+      `;
+    })
+    .join('');
+
+  // Bind click to load
+  list.querySelectorAll('[data-id]').forEach((el) => {
+    el.addEventListener('click', () => {
+      const id = el.getAttribute('data-id');
+      const item = history.find((x) => x.id === id);
+      if (!item) return;
+      app.loadAudit(item);
+    });
+  });
+}
+
+function formatAiOutput(settings, rawText) {
+  if (settings.aiStyle === 'text') {
+    return `<pre class="whitespace-pre-wrap">${escapeHtml(rawText)}</pre>`;
+  }
+  // If model returns raw HTML, we allow it; otherwise wrap.
+  const looksLikeHtml = /<\w+[^>]*>/.test(rawText);
+  if (looksLikeHtml) return rawText;
+  return `<div class="whitespace-pre-wrap">${escapeHtml(rawText)}</div>`;
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#039;');
+}
+
+const gis = new GisService();
+let settings = loadSettings();
+let history = loadHistory();
+let activeStats = null;
+let activeLocation = { lat: CONFIG.localDb.durban.lat, lon: CONFIG.localDb.durban.lon, address: CONFIG.localDb.durban.name };
+
+function updateUI() {
+  const area = safeNumber($('inArea')?.value);
+  const dmoss = safeNumber($('inDmoss')?.value);
+  const zone = $('inZone')?.value || 'GR1';
+
+  const isComplex = document.getElementById('inComplex')?.checked || false;
+  activeStats = CalculationService.compute(area, dmoss, zone, isComplex);
+
+  $('valNetArea').innerText = Math.round(activeStats.netArea).toLocaleString();
+  $('valDeduction').innerText = `(-${Math.round(activeStats.dmossArea)} m² DMOSS)`;
+  $('valYield').innerText = String(activeStats.units);
+  $('valZone').innerText = `Zone: ${activeStats.zoneKey}`;
+  $('valFees').innerText = `R ${(activeStats.fees / 1000).toFixed(0)}k`;
+  $('valSurcharge').innerText = `R ${(activeStats.surcharge / 1000).toFixed(0)}k`;
+  $('totalProjectValue').innerText = `R ${(activeStats.totalProject / 1e6).toFixed(1)}m`;
+}
+
+async function handleSearch() {
+  const q = $('siteInput').value;
+  const loader = $('mapLoader');
+  loader.style.display = 'flex';
+
+  const loc = await gis.search(q);
+  activeLocation = { lat: loc.lat, lon: loc.lon, address: loc.name };
+
+  gis.updateView(loc.lat, loc.lon, loc.name, (lat, lon) => {
+    activeLocation = { ...activeLocation, lat, lon, address: 'Manual Pin Location' };
+    $('displayCoords').innerText = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    $('displayAddress').innerText = activeLocation.address;
+    app.showToast('Location manually updated');
+  });
+
+  $('displayAddress').innerText = loc.name;
+  $('displayCoords').innerText = `${loc.lat.toFixed(5)}, ${loc.lon.toFixed(5)}`;
+
+  const btnExt = $('btnExternalPortal');
+  btnExt.onclick = () => window.open(CONFIG.externalPortal + encodeURIComponent(q), '_blank');
+
+  loader.style.display = 'none';
+  updateUI();
+}
+
+async function handleAiAction(type) {
+  if (!activeStats) return;
+  const output = $('aiOutput');
+  output.innerHTML = '<span class="animate-pulse">Neural Engine Processing…</span>';
+
+  const context = {
+    site: $('displayAddress').innerText,
+    coords: $('displayCoords').innerText,
+    zone: activeStats.zoneKey,
+    netArea: Math.round(activeStats.netArea),
+    gfa: Math.round(activeStats.gfa),
+    units: activeStats.units,
+    totalProjectZAR: Math.round(activeStats.totalProject),
+  };
+
+  const baseInst = 'Use South African planning common-sense, and clearly separate: assumptions vs facts. Do not invent municipal bylaws. If a rule is unknown, say it is unknown and what data is needed.';
+
+  let task = '';
+  if (type === 'swot') task = 'Provide a SWOT analysis (bullets), and a 3-point go/no-go verdict.';
+  if (type === 'eco') task = 'Provide an eco audit checklist: stormwater, heat, shade, mobility, green space, basic passive design.';
+  if (type === 'audit') task = 'Provide a feasibility memo: zoning assumptions, unit mix suggestion, parking approach, key risks, next data to fetch, and 5 action items.';
+
+  const prompt = `You are a professional property development analyst. ${baseInst}
+
+Context JSON:
+${JSON.stringify(context, null, 2)}
+
+Task:
+${task}
+
+Output: ${settings.aiStyle === 'text' ? 'plain text' : 'clean HTML (no scripts)'}
+`;
+
+  const text = await AiService.call(settings, prompt);
+  output.innerHTML = formatAiOutput(settings, text);
+}
+
+async function exportGis() {
+  if (!activeStats) return;
+  const lat = activeLocation.lat;
+  const lon = activeLocation.lon;
+  const address = activeLocation.address || $('displayAddress').innerText || 'Site';
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    app.showToast('Invalid coordinates. Run Scan first or drag the pin.');
+    return;
+  }
+
+  await gis.exportPackage(activeStats, address, lat, lon);
+  app.showToast('GIS export created');
+}
+
+function exportPdf() {
+  if (!activeStats) return;
+
+  const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+  const margin = 40;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(16);
+  doc.text('URBAN FORGE PRO | SITE AUDIT DOSSIER', margin, 60);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Site: ${$('displayAddress').innerText}`, margin, 84);
+  doc.text(`Coords: ${$('displayCoords').innerText}`, margin, 98);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 112);
+
+  const rows = [
+    ['Zone', activeStats.zoneKey],
+    ['Gross Area (m²)', Math.round(activeStats.rawArea).toLocaleString()],
+    ['DMOSS Deduction (m²)', Math.round(activeStats.dmossArea).toLocaleString()],
+    ['Net Area (m²)', Math.round(activeStats.netArea).toLocaleString()],
+    ['GFA (m²)', Math.round(activeStats.gfa).toLocaleString()],
+    ['Unit Yield (approx)', String(activeStats.units)],
+    ['Coverage (m²)', Math.round(activeStats.coverage).toLocaleString()],
+    ['Construction Cost (ZAR)', `R ${Math.round(activeStats.constructionCost).toLocaleString()}`],
+    ['Surcharge (ZAR)', `R ${Math.round(activeStats.surcharge).toLocaleString()}`],
+    ['Professional Fees (ZAR)', `R ${Math.round(activeStats.fees).toLocaleString()}`],
+    ['Total Project (ZAR)', `R ${Math.round(activeStats.totalProject).toLocaleString()}`],
+  ];
+
+  doc.autoTable({
+    startY: 140,
+    head: [['Metric', 'Value']],
+    body: rows,
+    theme: 'grid',
+    styles: { fontSize: 9 },
+    headStyles: { fillColor: [0, 0, 0], textColor: [255, 255, 255] },
+    margin: { left: margin, right: margin },
+  });
+
+  const y = doc.lastAutoTable.finalY + 22;
+  doc.setFont('helvetica', 'bold');
+  doc.text('Notes & Assumptions', margin, y);
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(9);
+  const notes = [
+    '• Zoning rules are simplified scheme presets; verify on the municipality portal.',
+    '• DMOSS is a user-entered constraint value (m²).',
+    '• Site boundary in GIS export is an approximation unless a true cadastral polygon is supplied.',
+    '• Financials are rule-of-thumb rates; adjust in code for your own benchmarks.',
+  ].join('\\n');
+  doc.text(notes, margin, y + 14);
+
+  doc.save('UrbanForge_Dossier.pdf');
+}
+
+async function exportPack() {
+  if (!activeStats) return;
+
+  const lat = activeLocation.lat;
+  const lon = activeLocation.lon;
+  const address = activeLocation.address || $('displayAddress').innerText || 'Site';
+
+  if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+    app.showToast('Invalid coordinates. Run Scan first or drag the pin.');
+    return;
+  }
+
+  // --- Build PDF as ArrayBuffer (same dossier content as exportPdf) ---
+  const doc = new window.jspdf.jsPDF({ unit: 'pt', format: 'a4' });
+  const margin = 40;
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('URBAN FORGE PRO | SITE DOSSIER', margin, 50);
+
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(10);
+  doc.text(`Address: ${address}`, margin, 75);
+  doc.text(`Coordinates: ${lat.toFixed(5)}, ${lon.toFixed(5)}`, margin, 90);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 105);
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(11);
+  doc.text('Key Metrics', margin, 135);
+
+  const metrics = [
+    ['Zone', activeStats.zoneKey],
+    ['Gross Area (m²)', Math.round(activeStats.rawArea).toLocaleString()],
+    ['DMOSS (m²)', Math.round(activeStats.dmossArea).toLocaleString()],
+    ['Net Area (m²)', Math.round(activeStats.netArea).toLocaleString()],
+    ['GFA (m²)', Math.round(activeStats.gfa).toLocaleString()],
+    ['Unit Yield', String(activeStats.units)],
+    ['Coverage (m²)', Math.round(activeStats.coverage).toLocaleString()],
+    ['Construction Cost', money(activeStats.constructionCost)],
+    ['Bulk Surcharge', money(activeStats.surcharge)],
+    ['Professional Fees', money(activeStats.fees)],
+    ['Complexity Fee', money(activeStats.complexityFee || 0)],
+    ['Total Project Value', money(activeStats.totalProject)],
+  ];
+
+  doc.autoTable({
+    startY: 150,
+    head: [['Metric', 'Value']],
+    body: metrics,
+    styles: { fontSize: 9, cellPadding: 4 },
+    headStyles: { fillColor: [0,0,0], textColor: [255,255,255] },
+    margin: { left: margin, right: margin },
+  });
+
+  const pdfArrayBuffer = doc.output('arraybuffer');
+
+  // --- Build GeoJSON (simple square around centroid scaled to area) ---
+  const area = Math.max(1, activeStats.netArea || 1);
+  const sideMeters = Math.sqrt(area);
+  const halfSideDeg = (sideMeters / 2) / 111000; // approx degrees per meter
+
+  const geojson = {
+    type: 'FeatureCollection',
+    features: [
+      {
+        type: 'Feature',
+        properties: { name: address, ...activeStats },
+        geometry: {
+          type: 'Polygon',
+          coordinates: [[
+            [lon - halfSideDeg, lat - halfSideDeg],
+            [lon + halfSideDeg, lat - halfSideDeg],
+            [lon + halfSideDeg, lat + halfSideDeg],
+            [lon - halfSideDeg, lat + halfSideDeg],
+            [lon - halfSideDeg, lat - halfSideDeg],
+          ]]
+        }
+      }
+    ]
+  };
+
+  // --- Zip pack ---
+  const zip = new JSZip();
+  zip.file('README.txt', `URBAN FORGE PRO | EXPORT PACK\n\nAddress: ${address}\nCoordinates: ${lat}, ${lon}\n\nContents:\n- dossier.pdf\n- audit.json\n- site_boundary.geojson\n`);
+  zip.file('dossier.pdf', new Uint8Array(pdfArrayBuffer));
+  zip.file('audit.json', JSON.stringify({ address, lat, lon, stats: activeStats }, null, 2));
+  zip.file('site_boundary.geojson', JSON.stringify(geojson, null, 2));
+
+  const blob = await zip.generateAsync({ type: 'blob' });
+  const safeName = address.replace(/[^a-z0-9]+/gi, '_').slice(0, 50) || 'site';
+  saveAs(blob, `UrbanForgePro_ExportPack_${safeName}.zip`);
+  app.showToast('Export pack created');
+}
+
+function saveCurrentAudit() {
+  if (!activeStats) return;
+  const address = activeLocation.address || $('displayAddress').innerText || 'Site';
+  const id = crypto.randomUUID?.() || String(Date.now());
+
+  const record = {
+    id,
+    ts: Date.now(),
+    address,
+    coords: { lat: activeLocation.lat, lon: activeLocation.lon },
+    query: $('siteInput').value,
+    inputs: {
+      grossArea: safeNumber($('inArea').value),
+      dmoss: safeNumber($('inDmoss').value),
+      zone: $('inZone').value,
+    },
+    stats: activeStats,
+  };
+
+  history = [record, ...history].slice(0, 50);
+  saveHistory(history);
+  renderHistory(history);
+  app.showToast('Audit saved');
+}
+
+function openSettings() {
+  $('settingsModal').classList.remove('hidden');
+  $('settingsModal').classList.add('flex');
+
+  const s = loadSettings();
+  $('inGeminiKey').value = s.geminiKey || '';
+  $('inGeminiModel').value = s.geminiModel || 'gemini-1.5-flash';
+  $('inAiStyle').value = s.aiStyle || 'html';
+}
+
+function closeSettings() {
+  $('settingsModal').classList.add('hidden');
+  $('settingsModal').classList.remove('flex');
+}
+
+function persistSettingsFromModal() {
+  settings = {
+    geminiKey: String($('inGeminiKey').value || '').trim(),
+    geminiModel: $('inGeminiModel').value || 'gemini-1.5-flash',
+    aiStyle: $('inAiStyle').value || 'html',
+  };
+  saveSettings(settings);
+  HealthService.check(settings);
+  app.showToast('Settings saved');
+  closeSettings();
+}
+
+function clearKey() {
+  const s = loadSettings();
+  s.geminiKey = '';
+  saveSettings(s);
+  settings = s;
+  $('inGeminiKey').value = '';
+  HealthService.check(settings);
+  app.showToast('API key cleared');
+}
+
+const app = {
+  forceStart: () => {
+    $('initGate').style.display = 'none';
+    $('workspace').style.opacity = '1';
+    $('workspace').style.pointerEvents = 'auto';
+  },
+  showToast: (msg) => {
+    const t = $('toast');
+    t.innerText = msg;
+    t.style.display = 'block';
+    setTimeout(() => (t.style.display = 'none'), 2500);
+  },
+  loadAudit: (record) => {
+    $('siteInput').value = record.query || record.address || '';
+    $('inArea').value = record.inputs?.grossArea ?? 0;
+    $('inDmoss').value = record.inputs?.dmoss ?? 0;
+    $('inZone').value = record.inputs?.zone || 'GR1';
+
+    updateUI();
+
+    const lat = safeNumber(record.coords?.lat, CONFIG.localDb.durban.lat);
+    const lon = safeNumber(record.coords?.lon, CONFIG.localDb.durban.lon);
+    const label = record.address || 'Saved Audit';
+
+    activeLocation = { lat, lon, address: label };
+    gis.updateView(lat, lon, label, (nLat, nLon) => {
+      activeLocation = { lat: nLat, lon: nLon, address: 'Manual Pin Location' };
+      $('displayCoords').innerText = `${nLat.toFixed(5)}, ${nLon.toFixed(5)}`;
+      $('displayAddress').innerText = activeLocation.address;
+      app.showToast('Location manually updated');
+    });
+
+    $('displayAddress').innerText = label;
+    $('displayCoords').innerText = `${lat.toFixed(5)}, ${lon.toFixed(5)}`;
+    app.showToast('Audit loaded');
+  },
+};
+
+window.app = app;
+
+document.addEventListener('DOMContentLoaded', async () => {
+  lucide.createIcons();
+  gis.init();
+
+  settings = loadSettings();
+  history = loadHistory();
+  renderHistory(history);
+
+  await HealthService.check(settings);
+
+  document.querySelectorAll('input, select').forEach((el) => {
+    el.addEventListener('input', updateUI);
+    el.addEventListener('change', updateUI);
+  });
+
+  $('searchBtn').onclick = handleSearch;
+  $('btnSwot').onclick = () => handleAiAction('swot');
+  $('btnEco').onclick = () => handleAiAction('eco');
+  $('btnFullAudit').onclick = () => handleAiAction('audit');
+
+  $('btnExportGis').onclick = exportGis;
+  $('downloadBtn').onclick = exportPdf;
+  const packBtn = document.getElementById('exportPackBtn');
+  if (packBtn) packBtn.onclick = exportPack;
+  $('saveBtn').onclick = saveCurrentAudit;
+
+  $('btnSettings').onclick = openSettings;
+  $('btnCloseSettings').onclick = closeSettings;
+  $('btnSaveSettings').onclick = persistSettingsFromModal;
+  $('btnClearKey').onclick = clearKey;
+  $('settingsModal').addEventListener('click', (e) => {
+    if (e.target === $('settingsModal')) closeSettings();
+  });
+
+  // Chat
+  $('sendChatBtn').onclick = async () => {
+    if (!activeStats) updateUI();
+    const input = $('chatInput');
+    const msg = String(input.value || '').trim();
+    if (!msg) return;
+
+    const body = $('chatBody');
+    body.insertAdjacentHTML('beforeend', `<div class="chat-bubble user">${escapeHtml(msg)}</div>`);
+    input.value = '';
+
+    const response = await AiService.call(settings, `Context JSON:
+${JSON.stringify({ site: activeLocation, stats: activeStats }, null, 2)}
+
+User question: ${msg}
+
+Rules: If unknown, say unknown. No fabricated bylaws.`);
+    body.insertAdjacentHTML('beforeend', `<div class="chat-bubble ai">${formatAiOutput(settings, response)}</div>`);
+    body.scrollTop = body.scrollHeight;
+  };
+
+  // Initial calc
+  updateUI();
+});
+</script>
+
+
+    <!-- SETTINGS MODAL -->
+    <div id="settingsModal" class="fixed inset-0 bg-black/60 z-[7000] hidden items-center justify-center p-4">
+        <div class="neo-card w-full max-w-lg p-6">
+            <div class="flex items-center justify-between border-b-2 border-black pb-3 mb-4">
+                <div class="text-[11px] font-black uppercase tracking-widest flex items-center gap-2">
+                    <i data-lucide="settings" class="w-4 h-4"></i> Runtime Settings
+                </div>
+                <button id="btnCloseSettings" class="btn-ghost px-3 h-8"><i data-lucide="x" class="w-3 h-3"></i> Close</button>
+            </div>
+            <div class="space-y-4">
+                <div>
+                    <label class="text-[9px] font-bold uppercase mb-1 block">Gemini API Key (stored locally)</label>
+                    <input id="inGeminiKey" type="password" class="w-full neo-input p-2 text-sm" placeholder="Paste your key here">
+                    <div class="text-[10px] opacity-60 mt-2">Tip: This app runs entirely in your browser. Your key is saved only in your localStorage on this device.</div>
+                </div>
+                <div class="grid grid-cols-2 gap-3">
+                    <div>
+                        <label class="text-[9px] font-bold uppercase mb-1 block">Gemini Model</label>
+                        <select id="inGeminiModel" class="w-full neo-input p-2 text-sm bg-white">
+                            <option value="gemini-1.5-flash">gemini-1.5-flash</option>
+                            <option value="gemini-1.5-pro">gemini-1.5-pro</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="text-[9px] font-bold uppercase mb-1 block">AI Output Style</label>
+                        <select id="inAiStyle" class="w-full neo-input p-2 text-sm bg-white">
+                            <option value="html">HTML (rich)</option>
+                            <option value="text">Plain text</option>
+                        </select>
+                    </div>
+                </div>
+                <div class="flex gap-3">
+                    <button id="btnSaveSettings" class="btn-core flex-1 h-10 text-[10px]"><i data-lucide="save" class="w-3 h-3"></i> Save Settings</button>
+                    <button id="btnClearKey" class="btn-ghost h-10 px-4"><i data-lucide="trash-2" class="w-3 h-3"></i> Clear Key</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+</body>
+</html>

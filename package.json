@@ -1,0 +1,9 @@
+{
+  "name": "urban-forge-pro",
+  "private": true,
+  "version": "7.1.4",
+  "description": "Urban Forge Pro static app (GitHub Pages deploy pack)",
+  "scripts": {
+    "dev": "npx --yes http-server -p 8000 -c-1 ."
+  }
+}
